@@ -35,7 +35,13 @@ That's the entire URL surface for v0. No `/me`, no `/search`, no `/api/*` from t
 
 Separate port wins because the deploy-independence + clean-API-surface arguments stack, and the public-exposure work is one-time either way. tickets-acceptor being localhost today actually pushes *toward* a separate port: we don't have to change tickets-acceptor's exposure model to ship the UI.
 
-**Exposure:** the VPS already terminates TLS for `mail.colinrozzi.com:443` (inbox). Adding another vhost / hostname pointed at `127.0.0.1:8081` is the path of least resistance. Final hostname + TLS setup is sentinel-dev / Colin's call.
+**Exposure (clarified after manager's sign-off ask):** today inbox-acceptor terminates TLS *in-actor* at `mail.colinrozzi.com:443` — there is no nginx/caddy reverse proxy in front of it. Exposing tickets-ui externally over HTTPS therefore needs one of two paths:
+
+  **(a)** Introduce a small reverse proxy (caddy or nginx) on the VPS fronting both inbox-acceptor and tickets-ui, with TLS termination at the proxy. New infrastructure, but once it's there both actors benefit and future siblings get cheap onboarding.
+
+  **(b)** The tickets-ui actor terminates its own TLS in-actor (mirroring inbox-acceptor's pattern) with its own cert and a separate `:443` vhost / hostname. No new infrastructure, but duplicates the in-actor TLS plumbing inbox-acceptor already carries — and every future UI actor pays the same cost.
+
+This design doc takes **no position** on (a) vs (b); both are compatible with the separate-UI-port choice above. It's a sentinel-dev / Colin call and is **not** a blocker on architectural sign-off — it blocks v0 deploy, not v0 design. Final hostname + cert delivery: same channel.
 
 ## 3. Wire shape — reads vs writes
 
@@ -104,7 +110,7 @@ These don't block this design doc, but block the first implementation PR:
 
 1. **Wire format** of the write API — tickets-dev to confirm paths, methods, request/response bodies.
 2. **Storage schema** in the `tickets` store — tickets-dev to confirm whether tickets and comments are co-located or separately keyed, and how to enumerate them for the list view.
-3. **Public hostname + TLS** for the UI port — sentinel-dev / Colin to confirm the reverse-proxy story.
+3. **Public hostname + TLS** for the UI port — sentinel-dev / Colin to pick between §2(a) (introduce a reverse proxy fronting inbox-acceptor + tickets-ui) and §2(b) (UI actor terminates its own TLS in-actor on a separate `:443` vhost). Not blocking design sign-off; blocking v0 deploy.
 4. **Bearer token delivery** to the UI actor — env var? sentinel-injected manifest config? Match how tickets-acceptor / inbox actors do it today.
 5. **Templating crate** wasi-preview2 compatibility — verify `minijinja` builds cleanly; fall back to `format!` if not.
 6. **Shared design conventions with inbox-ui-dev** — open the conversation once this doc is merged so we don't pre-empt before the architecture is approved.
