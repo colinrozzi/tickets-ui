@@ -35,13 +35,11 @@ That's the entire URL surface for v0. No `/me`, no `/search`, no `/api/*` from t
 
 Separate port wins because the deploy-independence + clean-API-surface arguments stack, and the public-exposure work is one-time either way. tickets-acceptor being localhost today actually pushes *toward* a separate port: we don't have to change tickets-acceptor's exposure model to ship the UI.
 
-**Exposure (clarified after manager's sign-off ask):** today inbox-acceptor terminates TLS *in-actor* at `mail.colinrozzi.com:443` — there is no nginx/caddy reverse proxy in front of it. Exposing tickets-ui externally over HTTPS therefore needs one of two paths:
+**Exposure (current direction, per manager 2026-05-31):** today inbox-acceptor terminates TLS *in-actor* at `mail.colinrozzi.com:443` — there is no nginx/caddy reverse proxy in front of it. Colin's lean for the long-term exposure story is **neither off-the-shelf proxy nor in-actor-only**: it's a Theater-native **frontdoor** actor that binds `:443`, peeks the TLS ClientHello, and SNI-routes encrypted streams to backends on loopback. Each backend (inbox-acceptor, tickets-ui, future siblings) keeps its own TLS termination + own cert + own `:NNNN` binding; frontdoor only does hostname routing. A `frontdoor-dev` specialist is being spun up to own that work.
 
-  **(a)** Introduce a small reverse proxy (caddy or nginx) on the VPS fronting both inbox-acceptor and tickets-ui, with TLS termination at the proxy. New infrastructure, but once it's there both actors benefit and future siblings get cheap onboarding.
+**What this means for tickets-ui v0:** the architecture above is **unchanged**. The UI actor binds plain HTTP on `127.0.0.1:8081` — no TLS needed for the v0 deploy because Colin reaches it via an SSH tunnel for testing. When frontdoor lands, the path-of-least-resistance is to *additionally* configure a TLS server on the same `:8081` listener (matching inbox-acceptor's `let's-encrypt cert mount` pattern) so frontdoor can SNI-route encrypted bytes straight to us. v0's separate-port choice is forward-compatible with frontdoor; no architectural commitment changes.
 
-  **(b)** The tickets-ui actor terminates its own TLS in-actor (mirroring inbox-acceptor's pattern) with its own cert and a separate `:443` vhost / hostname. No new infrastructure, but duplicates the in-actor TLS plumbing inbox-acceptor already carries — and every future UI actor pays the same cost.
-
-This design doc takes **no position** on (a) vs (b); both are compatible with the separate-UI-port choice above. It's a sentinel-dev / Colin call and is **not** a blocker on architectural sign-off — it blocks v0 deploy, not v0 design. Final hostname + cert delivery: same channel.
+This design doc therefore takes **no position** on cert / hostname delivery; it's a sentinel-dev / frontdoor-dev / Colin coordination, **not** a blocker on architectural sign-off. v0 deploys behind SSH tunnel; public HTTPS lands with frontdoor.
 
 ## 3. Wire shape — reads vs writes
 
@@ -110,7 +108,7 @@ These don't block this design doc, but block the first implementation PR:
 
 1. **Wire format** of the write API — tickets-dev to confirm paths, methods, request/response bodies.
 2. **Storage schema** in the `tickets` store — tickets-dev to confirm whether tickets and comments are co-located or separately keyed, and how to enumerate them for the list view.
-3. **Public hostname + TLS** for the UI port — sentinel-dev / Colin to pick between §2(a) (introduce a reverse proxy fronting inbox-acceptor + tickets-ui) and §2(b) (UI actor terminates its own TLS in-actor on a separate `:443` vhost). Not blocking design sign-off; blocking v0 deploy.
+3. **Public hostname + TLS** for the UI port — coordinate with `frontdoor-dev` (being spun up) on the SNI-routing handoff: cert mount path, hostname assignment, when the `:8081` listener should add a TLS server config matching inbox-acceptor's pattern. Not blocking v0 (which deploys behind an SSH tunnel); blocks public-HTTPS availability.
 4. **Bearer token delivery** to the UI actor — env var? sentinel-injected manifest config? Match how tickets-acceptor / inbox actors do it today.
 5. **Templating crate** wasi-preview2 compatibility — verify `minijinja` builds cleanly; fall back to `format!` if not.
 6. **Shared design conventions with inbox-ui-dev** — open the conversation once this doc is merged so we don't pre-empt before the architecture is approved.
