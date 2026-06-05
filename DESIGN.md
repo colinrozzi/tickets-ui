@@ -22,7 +22,7 @@ That's the entire URL surface for v0. No `/me`, no `/search`, no `/api/*` from t
 
 ## 2. Listener strategy
 
-**Choice:** the UI actor binds its own port (proposed: `127.0.0.1:8081`), exposed publicly via the VPS reverse proxy at a dedicated hostname (e.g. `tickets-ui.colinrozzi.com` or whatever the host setup ends up being — leaving this to sentinel-dev / Colin). tickets-acceptor stays on `127.0.0.1:8443` and the UI actor calls into it over loopback when it needs to write.
+**Choice:** the UI actor binds its own port (proposed: `127.0.0.1:9444`), exposed publicly via the VPS reverse proxy at a dedicated hostname (e.g. `tickets-ui.colinrozzi.com` or whatever the host setup ends up being — leaving this to sentinel-dev / Colin). tickets-acceptor stays on `127.0.0.1:8443` and the UI actor calls into it over loopback when it needs to write.
 
 **Tradeoff considered:**
 
@@ -37,7 +37,7 @@ Separate port wins because the deploy-independence + clean-API-surface arguments
 
 **Exposure (current direction, per manager 2026-05-31):** today inbox-acceptor terminates TLS *in-actor* at `mail.colinrozzi.com:443` — there is no nginx/caddy reverse proxy in front of it. Colin's lean for the long-term exposure story is **neither off-the-shelf proxy nor in-actor-only**: it's a Theater-native **frontdoor** actor that binds `:443`, peeks the TLS ClientHello, and SNI-routes encrypted streams to backends on loopback. Each backend (inbox-acceptor, tickets-ui, future siblings) keeps its own TLS termination + own cert + own `:NNNN` binding; frontdoor only does hostname routing. A `frontdoor-dev` specialist is being spun up to own that work.
 
-**What this means for tickets-ui v0:** the architecture above is **unchanged**. The UI actor binds plain HTTP on `127.0.0.1:8081` — no TLS needed for the v0 deploy because Colin reaches it via an SSH tunnel for testing. When frontdoor lands, the path-of-least-resistance is to *additionally* configure a TLS server on the same `:8081` listener (matching inbox-acceptor's `let's-encrypt cert mount` pattern) so frontdoor can SNI-route encrypted bytes straight to us. v0's separate-port choice is forward-compatible with frontdoor; no architectural commitment changes.
+**What this means for tickets-ui v0:** the architecture above is **unchanged**. The UI actor binds plain HTTP on `127.0.0.1:9444` — no TLS needed for the v0 deploy because Colin reaches it via an SSH tunnel for testing. When frontdoor lands, the path-of-least-resistance is to *additionally* configure a TLS server on the same `:8081` listener (matching inbox-acceptor's `let's-encrypt cert mount` pattern) so frontdoor can SNI-route encrypted bytes straight to us. v0's separate-port choice is forward-compatible with frontdoor; no architectural commitment changes.
 
 This design doc therefore takes **no position** on cert / hostname delivery; it's a sentinel-dev / frontdoor-dev / Colin coordination, **not** a blocker on architectural sign-off. v0 deploys behind SSH tunnel; public HTTPS lands with frontdoor.
 
