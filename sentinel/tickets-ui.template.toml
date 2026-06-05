@@ -34,7 +34,7 @@
 #   bytes to the wasm component loader.
 #
 # COEXISTENCE CONSTRAINT:
-#   tickets-ui binds 127.0.0.1:8081. tickets-acceptor binds
+#   tickets-ui binds 127.0.0.1:9444. tickets-acceptor binds
 #   127.0.0.1:8443 (its API listener). The two ports do not collide
 #   and the actors share no store — tickets-ui reads + writes go
 #   through the API exclusively (DESIGN.md §3, amended 2026-06-05).
@@ -52,11 +52,11 @@
 #
 # server_tls IS INTENTIONALLY ABSENT:
 #   v0 testing is over an SSH tunnel from Colin's laptop straight to
-#   127.0.0.1:8081 on the VPS — no TLS needed. When the frontdoor
+#   127.0.0.1:9444 on the VPS — no TLS needed. When the frontdoor
 #   actor (https://github.com/colinrozzi/frontdoor) lands, this
 #   template grows a [handler.server_tls] block alongside the tcp
 #   handler with the let'sencrypt cert paths, and frontdoor SNI-routes
-#   tickets-ui.colinrozzi.com to 127.0.0.1:8081. The UI actor code
+#   tickets-ui.colinrozzi.com to 127.0.0.1:9444. The UI actor code
 #   does not change — only this template does.
 
 name = "tickets-ui"
@@ -66,9 +66,9 @@ package = "__PACKAGE__"
 #   {
 #     "api_addr":    "127.0.0.1:8443",
 #     "api_token":   "<bearer>",
-#     "listen_addr": "127.0.0.1:8081"
+#     "listen_addr": "127.0.0.1:9444"
 #   }
-initial_state = '{"api_addr":"127.0.0.1:8443","api_token":"__API_TOKEN__","listen_addr":"127.0.0.1:8081"}'
+initial_state = '{"api_addr":"127.0.0.1:8443","api_token":"__API_TOKEN__","listen_addr":"127.0.0.1:9444"}'
 
 [[handler]]
 type = "runtime"

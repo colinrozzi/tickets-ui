@@ -18,7 +18,7 @@
 //!   {
 //!     "api_addr":    "127.0.0.1:8443",   // tickets-acceptor API
 //!     "api_token":   "<bearer>",         // for outbound writes
-//!     "listen_addr": "127.0.0.1:8081"    // optional; this default
+//!     "listen_addr": "127.0.0.1:9444"    // optional; this default
 //!   }
 
 #![no_std]
@@ -32,7 +32,7 @@ use serde::{Deserialize, Serialize};
 
 packr_guest::setup_guest!();
 
-const DEFAULT_LISTEN_ADDR: &str = "127.0.0.1:8081";
+const DEFAULT_LISTEN_ADDR: &str = "127.0.0.1:9444";
 const VALID_STATUSES: &[&str] = &["open", "in-progress", "done", "closed"];
 
 #[derive(Clone, GraphValue)]
