@@ -1,0 +1,83 @@
+/* tickets-ui — v0 scaffold styles. Plain, hand-written, no build step. */
+
+:root {
+  --fg: #1a1a1a;
+  --muted: #6a6a6a;
+  --bg: #fdfdfc;
+  --accent: #2a6cdf;
+  --rule: #e3e3df;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+main {
+  max-width: 56rem;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+}
+
+h1 {
+  font-size: 1.5rem;
+  margin: 0 0 1rem;
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 0.5rem;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+a:hover { text-decoration: underline; }
+
+.placeholder {
+  color: var(--muted);
+  font-style: italic;
+}
+
+form label {
+  display: block;
+  margin: 0.75rem 0;
+}
+
+input, textarea, select {
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  font-size: 1rem;
+  font-family: inherit;
+}
+
+button {
+  margin-top: 0.5rem;
+  padding: 0.4rem 1rem;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: white;
+  border-radius: 3px;
+  font-size: 1rem;
+  cursor: pointer;
+}
+button:hover { filter: brightness(0.95); }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+}
+th, td {
+  text-align: left;
+  padding: 0.5rem 0.5rem;
+  border-bottom: 1px solid var(--rule);
+}
+th { color: var(--muted); font-weight: 600; }

@@ -1,0 +1,20 @@
+name = "tickets-ui"
+version = "0.1.0"
+package = "/home/colin/work/actors/tickets-ui/target/wasm32-unknown-unknown/release/tickets_ui.wasm"
+# initial_state is a JSON blob (replace at deploy time):
+#   {
+#     "api_addr":    "127.0.0.1:8443",   // tickets-acceptor API listener
+#     "api_token":   "<bearer>",         // shared bearer the API expects
+#     "listen_addr": "127.0.0.1:8081"    // optional; the actor default
+#   }
+# The bearer here is the SAME bearer tickets-acceptor accepts. tickets-dev's
+# guidance is to deliver it via initial_state (not by reading the acceptor's
+# `api-bearer-token` store label). Sentinel's build_manifest.py will inject
+# the production value on the VPS.
+initial_state = "{\"api_addr\":\"127.0.0.1:8443\",\"api_token\":\"dev-token-change-me\",\"listen_addr\":\"127.0.0.1:8081\"}"
+
+[[handler]]
+type = "runtime"
+
+[[handler]]
+type = "tcp"
