@@ -81,3 +81,37 @@ th, td {
   border-bottom: 1px solid var(--rule);
 }
 th { color: var(--muted); font-weight: 600; }
+
+section { margin-top: 1.5rem; }
+
+dl.meta {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.25rem 1rem;
+  margin: 0.5rem 0 1rem;
+}
+dl.meta dt { color: var(--muted); }
+dl.meta dd { margin: 0; }
+
+ol.thread {
+  list-style: none;
+  padding: 0;
+}
+ol.thread > li {
+  border-left: 3px solid var(--rule);
+  padding: 0.25rem 0.75rem;
+  margin-bottom: 0.75rem;
+}
+ol.thread .ts {
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+form.filters {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-end;
+  margin-top: 0.75rem;
+}
+form.filters label { margin: 0; }
+form.filters input, form.filters select { width: 14rem; }
