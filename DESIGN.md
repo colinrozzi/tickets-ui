@@ -43,28 +43,33 @@ This design doc therefore takes **no position** on cert / hostname delivery; it'
 
 ## 3. Wire shape — reads vs writes
 
-**Reads go to the store directly. Writes go through the API.** Per the locked decisions.
+**Both reads and writes go through the tickets API over loopback.** Amended 2026-06-05 per Colin's sign-off on manager's flip ask.
 
-### Reads (`theater:simple/store`, `store_id = "tickets"`)
+The original v0 call here was "reads direct from `theater:simple/store`, writes through the API." When tickets-dev confirmed the wire format, two facts surfaced that pushed the call the other way:
 
-| View | What the actor reads |
-|---|---|
-| List | Enumerate ticket records (assume an index entry or prefix scan — exact shape TBD with tickets-dev); filter in-actor by query params; render table |
-| Detail | Read the single ticket record + its comment thread (whether one document or many keys is tickets-dev's call — see open questions below) |
+- The `tickets` store holds *one* opaque blob (`serde_json::to_vec(&Vec<Ticket>)`) under the label `tickets-list`. No index, no prefix scan, no per-ticket key. A store-direct read deserializes the whole corpus.
+- The phase-2 singleton-tickets-actor refactor on tickets-dev's roadmap will change that layout. Store-direct readers break at the cutover unless tickets-dev keeps `tickets-list` as a back-compat materialized view, which is a coordination burden on them.
 
-Storage layout is owned by tickets-acceptor / tickets-dev. The UI reads whatever shape is there; this doc does **not** prescribe schema. The expected read APIs in the WIT are the standard `theater:simple/store` operations.
+Going API-over-loopback for reads makes the UI symmetric (one transport, one bearer, one error model), insulates it from backend storage shape, and removes the future cutover handshake. The price is one loopback HTTP round-trip per view — negligible.
 
-### Writes (HTTPS to `127.0.0.1:8443` over loopback, with bearer auth)
+### Reads (plaintext HTTP to `127.0.0.1:8443`, with bearer auth)
 
-| Action | Roughly maps to |
-|---|---|
-| Create ticket | `POST /tickets` |
-| Add comment | `POST /tickets/<id>/comments` |
-| Transition status | `POST /tickets/<id>/status` (or `PATCH /tickets/<id>`) |
+| View | UI call | Upstream |
+|---|---|---|
+| List | `GET /` (with optional `?assignee=…&status=…`) | `GET /v1/tickets[?assignee=…&status=…]` → `{tickets: [Ticket, …]}` |
+| Detail | `GET /t/<id>` | `GET /v1/tickets/<id>` → `Ticket` (with `comments` inline) |
 
-These map ~1:1 to the existing `tickets` CLI subcommands. Exact paths, methods, and request/response bodies will be confirmed with tickets-dev as a follow-up — they're the source of truth on the wire format. The UI actor holds the bearer token (loaded from env or sentinel-injected config); the browser never sees it.
+### Writes (plaintext HTTP to `127.0.0.1:8443`, with bearer auth)
 
-**No `/api` from the UI actor.** Browsers submit plain forms, the UI actor turns them into authenticated API calls server-side, and 303-redirects back to the detail page. Progressive enhancement (fetch + optimistic update) is explicitly out of scope.
+| UI route | Upstream | Body |
+|---|---|---|
+| `POST /new` | `POST /v1/tickets` | `{title, body, reporter, assignee}` |
+| `POST /t/<id>/comments` | `POST /v1/tickets/<id>/comment` | `{author, body}` |
+| `POST /t/<id>/status` | `POST /v1/tickets/<id>/status` | `{status}` |
+
+All five endpoints carry `Authorization: Bearer <api_token>`; the actor loads the token from its JSON `initial_state` and the browser never sees it. The whole-ticket-back-on-mutation convention from `tickets-handler` means write paths don't need a follow-up `GET` to render the post-redirect page.
+
+**No `/api` from the UI actor.** Browsers submit plain forms, the UI actor turns them into authenticated API calls server-side, and 303-redirects back to the right view. Progressive enhancement (fetch + optimistic update) is explicitly out of scope.
 
 ## 4. Actor decomposition
 
@@ -106,11 +111,11 @@ Explicit scope cuts so this doesn't sprawl:
 
 These don't block this design doc, but block the first implementation PR:
 
-1. **Wire format** of the write API — tickets-dev to confirm paths, methods, request/response bodies.
-2. **Storage schema** in the `tickets` store — tickets-dev to confirm whether tickets and comments are co-located or separately keyed, and how to enumerate them for the list view.
-3. **Public hostname + TLS** for the UI port — coordinate with `frontdoor-dev` (being spun up) on the SNI-routing handoff: cert mount path, hostname assignment, when the `:8081` listener should add a TLS server config matching inbox-acceptor's pattern. Not blocking v0 (which deploys behind an SSH tunnel); blocks public-HTTPS availability.
-4. **Bearer token delivery** to the UI actor — env var? sentinel-injected manifest config? Match how tickets-acceptor / inbox actors do it today.
-5. **Templating crate** wasi-preview2 compatibility — verify `minijinja` builds cleanly; fall back to `format!` if not.
+1. ~~**Wire format** of the write API~~ — *Resolved 2026-06-05.* See §3.
+2. ~~**Storage schema** in the `tickets` store~~ — *Moot 2026-06-05.* §3 was amended to read via the API, so the UI never reads the store directly. Whatever the singleton refactor does to the store layout is transparent.
+3. **Public hostname + TLS** for the UI port — coordinate with `frontdoor-dev` on the SNI-routing handoff: cert mount path, hostname assignment, when the `:8081` listener should add a TLS server config matching inbox-acceptor's pattern. Not blocking v0 (SSH tunnel); blocks public-HTTPS availability.
+4. ~~**Bearer token delivery** to the UI actor~~ — *Resolved 2026-06-05.* The actor takes JSON `initial_state` `{api_addr, api_token, listen_addr?}` and sentinel injects values via its template-substitution machinery (same shape as inbox-acceptor).
+5. **Templating crate** wasi-preview2 compatibility — verify `minijinja` builds cleanly; fall back to `format!` if not. *Note: v0 ships with `format!`-string templates by choice; minijinja swap is an optional follow-up, not a blocker.*
 6. **Shared design conventions with inbox-ui-dev** — open the conversation once this doc is merged so we don't pre-empt before the architecture is approved.
 
 ## Why this shape
