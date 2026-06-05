@@ -1,0 +1,93 @@
+name: Release
+
+on:
+  # Developer-initiated: `nix run .#release` from main creates and pushes
+  # a release-YYYYMMDD-<sha7> tag. The tag push triggers this workflow.
+  # No auto-trigger on every main commit — release is an explicit step.
+  push:
+    tags: ['release-*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  release:
+    name: Build + tag + upload artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: DeterminateSystems/nix-installer-action@main
+
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+
+      # Workspace build sanity check. Blocks the release if main does not
+      # compile — same pattern as tickets/inbox. Produces result/ with
+      # tickets_ui.wasm.
+      - name: Build workspace
+        run: nix build
+
+      - name: Create GitHub release and upload artifacts
+        run: |
+          # Tag was created and pushed by `nix run .#release`. For
+          # workflow_dispatch runs synthesize the same shape from HEAD.
+          if [ -n "$GITHUB_REF_NAME" ] && [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG="$GITHUB_REF_NAME"
+          else
+            DATE=$(date +%Y%m%d)
+            SHA=$(git rev-parse --short=7 HEAD)
+            TAG="release-$DATE-$SHA"
+            git tag "$TAG"
+            git push origin "$TAG"
+          fi
+          gh release create "$TAG" --generate-notes
+
+          STAGE_TAG="${TAG#release-}"
+          REPO="${{ github.repository }}"
+          ASSETS=()
+
+          # 1) Bare wasm. Sentinel's `package` field can point here
+          #    directly via the canonical release URL.
+          cp "$(realpath result)/tickets_ui.wasm" "tickets_ui-${STAGE_TAG}.wasm"
+          chmod +w "tickets_ui-${STAGE_TAG}.wasm"
+          ASSETS+=("tickets_ui-${STAGE_TAG}.wasm")
+
+          # 2) Release-flavored manifest with a self-referential package
+          #    URL pointing at this release's wasm. Mirrors the in-repo
+          #    ui/manifest.toml's handler set. No initial_state — the
+          #    spawner provides it (sentinel template or theater spawn
+          #    API). No server_tls block — v0 deploys behind SSH tunnel;
+          #    when frontdoor lands, the sentinel-side template adds it.
+          UI_MANIFEST_FILE="tickets-ui-${STAGE_TAG}.toml"
+          UI_WASM_URL="https://github.com/${REPO}/releases/download/${TAG}/tickets_ui-${STAGE_TAG}.wasm"
+          cat > "${UI_MANIFEST_FILE}" <<TOML
+          name = "tickets-ui"
+          version = "0.1.0"
+          package = "${UI_WASM_URL}"
+
+          [[handler]]
+          type = "runtime"
+
+          [[handler]]
+          type = "tcp"
+          TOML
+          ASSETS+=("${UI_MANIFEST_FILE}")
+
+          # 3) Bundle (humans / local use) + sha256.
+          STAGE="tickets-ui-${STAGE_TAG}-wasm32"
+          mkdir -p "$STAGE"
+          cp "$(realpath result)/tickets_ui.wasm" "$STAGE/"
+          chmod -R +w "$STAGE"
+          tar -czf "$STAGE.tar.gz" "$STAGE"
+          sha256sum "$STAGE.tar.gz" > "$STAGE.tar.gz.sha256"
+
+          gh release upload "$TAG" "${ASSETS[@]}" "$STAGE.tar.gz" "$STAGE.tar.gz.sha256"
+        env:
+          GH_TOKEN: ${{ github.token }}
