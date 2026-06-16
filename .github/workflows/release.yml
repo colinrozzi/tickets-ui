@@ -71,6 +71,7 @@ jobs:
           name = "tickets-ui"
           version = "0.1.0"
           package = "${UI_WASM_URL}"
+          static_package = true
 
           [[handler]]
           type = "runtime"

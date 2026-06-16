@@ -51,6 +51,7 @@ pack_types! {
         theater:simple/tcp {
             listen: func(address: string) -> result<string, string>,
             connect: func(address: string) -> result<string, string>,
+            activate: func(connection-id: string) -> result<_, string>,
             receive: func(connection-id: string, max-bytes: u32) -> result<list<u8>, string>,
             send: func(connection-id: string, data: list<u8>) -> result<u64, string>,
             close: func(connection-id: string) -> result<_, string>,
@@ -70,6 +71,9 @@ fn tcp_listen(address: String) -> Result<String, String>;
 
 #[import(module = "theater:simple/tcp", name = "connect")]
 fn tcp_connect(address: String) -> Result<String, String>;
+
+#[import(module = "theater:simple/tcp", name = "activate")]
+fn tcp_activate(connection_id: String) -> Result<(), String>;
 
 #[import(module = "theater:simple/tcp", name = "receive")]
 fn tcp_receive(connection_id: String, max_bytes: u32) -> Result<Vec<u8>, String>;
@@ -206,6 +210,8 @@ fn handle_connection(
 }
 
 fn try_handle(state: &UiState, connection_id: &str) -> Result<(), String> {
+    tcp_activate(connection_id.to_string())
+        .map_err(|e| format!("activate: {}", e))?;
     let request = tcp_receive(connection_id.to_string(), 65536)
         .map_err(|e| format!("receive: {}", e))?;
     let response = route(state, &request);
