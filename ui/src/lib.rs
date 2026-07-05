@@ -396,7 +396,8 @@ fn handle_set_status(state: &UiState, id_str: &str, request_str: &str) -> Vec<u8
 }
 
 // ============================================================================
-// View renderers — read-side stays placeholder until the read-path-flip lands.
+// View renderers — reads go through the tickets API over loopback
+// (GET /v1/tickets, GET /v1/tickets/<id>); see load_tickets/load_ticket.
 // ============================================================================
 
 fn render_list_view(state: &UiState, query: &str) -> Vec<u8> {
