@@ -12,17 +12,21 @@ Single wasm actor (`packr-guest`, `no_std + alloc`) that:
 - binds a TCP listener (default `127.0.0.1:9444`) in `init`,
 - serves each connection in-place — no per-connection child spawn,
 - renders server-side HTML with `format!` strings + hand-written CSS embedded via `include_str!`,
-- POSTs writes to the tickets API on loopback (default `127.0.0.1:8443`, plaintext, `Authorization: Bearer …`).
+- reads *and* writes go through the tickets API on loopback (default `127.0.0.1:8443`, plaintext, `Authorization: Bearer …`).
 
-Wire shape for writes per `tickets-handler`'s 2026-06-05 reply:
+Both paths use the API over loopback — the store-direct read option from the
+original DESIGN was flipped to `GET /v1/tickets` and signed off 2026-06-05
+(see DESIGN.md §3). List + detail renderers are wired against it.
+
+Wire shape per `tickets-handler`'s 2026-06-05 reply:
 
 | UI route | Upstream | Body |
 |---|---|---|
+| `GET /` (with optional `?status=…&assignee=…`) | `GET /v1/tickets[?status=…&assignee=…]` | — |
+| `GET /t/<id>` | `GET /v1/tickets/<id>` | — |
 | `POST /new` | `POST /v1/tickets` | `{title, body, reporter, assignee}` |
 | `POST /t/<id>/comments` | `POST /v1/tickets/<id>/comment` | `{author, body}` |
 | `POST /t/<id>/status` | `POST /v1/tickets/<id>/status` | `{status}` |
-
-The read path is still pending a decision: store-direct (the original DESIGN.md §3 call) vs `GET /v1/tickets` over loopback. List + detail renderers carry a placeholder until that lands.
 
 ## Build
 
