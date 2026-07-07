@@ -12,7 +12,7 @@ Single wasm actor (`packr-guest`, `no_std + alloc`) that:
 - binds a TCP listener (default `127.0.0.1:9444`) in `init`,
 - serves each connection in-place — no per-connection child spawn,
 - renders server-side HTML with `format!` strings + hand-written CSS embedded via `include_str!`,
-- reads *and* writes go through the tickets API on loopback (default `127.0.0.1:8443`, plaintext, `Authorization: Bearer …`).
+- reads *and* writes go through the tickets API on loopback (default `127.0.0.1:8445`, plaintext, `Authorization: Bearer …`).
 
 Both paths use the API over loopback — the store-direct read option from the
 original DESIGN was flipped to `GET /v1/tickets` and signed off 2026-06-05
@@ -40,7 +40,7 @@ theater spawn ui/manifest.toml # bring the actor up against a running tickets-ac
 
 ```json
 {
-  "api_addr":    "127.0.0.1:8443",
+  "api_addr":    "127.0.0.1:8445",
   "api_token":   "<bearer the tickets API accepts>",
   "listen_addr": "127.0.0.1:9444"
 }
