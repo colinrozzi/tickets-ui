@@ -4,7 +4,7 @@ package = "/home/colin/work/actors/tickets-ui/target/wasm32-unknown-unknown/rele
 static_package = true
 # initial_state is a JSON blob (replace at deploy time):
 #   {
-#     "api_addr":    "127.0.0.1:8443",   // tickets-acceptor API listener
+#     "api_addr":    "127.0.0.1:8445",   // tickets-acceptor API listener
 #     "api_token":   "<bearer>",         // shared bearer the API expects
 #     "listen_addr": "127.0.0.1:9444"    // optional; the actor default
 #   }
@@ -12,7 +12,7 @@ static_package = true
 # guidance is to deliver it via initial_state (not by reading the acceptor's
 # `api-bearer-token` store label). Sentinel's build_manifest.py will inject
 # the production value on the VPS.
-initial_state = "{\"api_addr\":\"127.0.0.1:8443\",\"api_token\":\"dev-token-change-me\",\"listen_addr\":\"127.0.0.1:9444\"}"
+initial_state = "{\"api_addr\":\"127.0.0.1:8445\",\"api_token\":\"dev-token-change-me\",\"listen_addr\":\"127.0.0.1:9444\"}"
 
 [[handler]]
 type = "runtime"

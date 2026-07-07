@@ -22,11 +22,11 @@ That's the entire URL surface for v0. No `/me`, no `/search`, no `/api/*` from t
 
 ## 2. Listener strategy
 
-**Choice:** the UI actor binds its own port (proposed: `127.0.0.1:9444`), exposed publicly via the VPS reverse proxy at a dedicated hostname (e.g. `tickets-ui.colinrozzi.com` or whatever the host setup ends up being — leaving this to sentinel-dev / Colin). tickets-acceptor stays on `127.0.0.1:8443` and the UI actor calls into it over loopback when it needs to write.
+**Choice:** the UI actor binds its own port (proposed: `127.0.0.1:9444`), exposed publicly via the VPS reverse proxy at a dedicated hostname (e.g. `tickets-ui.colinrozzi.com` or whatever the host setup ends up being — leaving this to sentinel-dev / Colin). tickets-acceptor stays on `127.0.0.1:8445` and the UI actor calls into it over loopback when it needs to write.
 
 **Tradeoff considered:**
 
-|  | Separate port (chosen) | Sub-route of tickets-acceptor:8443 |
+|  | Separate port (chosen) | Sub-route of tickets-acceptor:8445 |
 |---|---|---|
 | Deploy independence | UI and API actors release on their own cycles | Coupled — either tickets-acceptor proxies to UI actor (extra hop, extra wiring), or UI lives inside tickets-acceptor (collapses two actors into one — gives up the decomposition) |
 | Surface separation | tickets-acceptor stays a pure JSON API | Adds HTML rendering responsibility to the API actor or routing complexity to it |
@@ -52,14 +52,14 @@ The original v0 call here was "reads direct from `theater:simple/store`, writes 
 
 Going API-over-loopback for reads makes the UI symmetric (one transport, one bearer, one error model), insulates it from backend storage shape, and removes the future cutover handshake. The price is one loopback HTTP round-trip per view — negligible.
 
-### Reads (plaintext HTTP to `127.0.0.1:8443`, with bearer auth)
+### Reads (plaintext HTTP to `127.0.0.1:8445`, with bearer auth)
 
 | View | UI call | Upstream |
 |---|---|---|
 | List | `GET /` (with optional `?assignee=…&status=…`) | `GET /v1/tickets[?assignee=…&status=…]` → `{tickets: [Ticket, …]}` |
 | Detail | `GET /t/<id>` | `GET /v1/tickets/<id>` → `Ticket` (with `comments` inline) |
 
-### Writes (plaintext HTTP to `127.0.0.1:8443`, with bearer auth)
+### Writes (plaintext HTTP to `127.0.0.1:8445`, with bearer auth)
 
 | UI route | Upstream | Body |
 |---|---|---|

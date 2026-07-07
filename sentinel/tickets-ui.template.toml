@@ -35,9 +35,12 @@
 #
 # COEXISTENCE CONSTRAINT:
 #   tickets-ui binds 127.0.0.1:9444. tickets-acceptor binds
-#   127.0.0.1:8443 (its API listener). The two ports do not collide
+#   127.0.0.1:8445 (its API listener). The two ports do not collide
 #   and the actors share no store — tickets-ui reads + writes go
 #   through the API exclusively (DESIGN.md §3, amended 2026-06-05).
+#   NOTE (2026-07-05 public-URL cutover): the tickets API moved to :8445.
+#   :8443 is now inbox-acceptor (mail HTTPS API), :8444 is sentinel's
+#   command surface — do NOT point api_addr at either.
 #
 # WHY initial_state IS A SINGLE-LINE TOML LITERAL (not multi-line):
 #   Sentinel embeds this entire template as a STRING value in its own
@@ -65,11 +68,11 @@ package = "__PACKAGE__"
 static_package = true
 # JSON shape (one-line for nesting-safety; see operator note above):
 #   {
-#     "api_addr":    "127.0.0.1:8443",
+#     "api_addr":    "127.0.0.1:8445",
 #     "api_token":   "<bearer>",
 #     "listen_addr": "127.0.0.1:9444"
 #   }
-initial_state = '{"api_addr":"127.0.0.1:8443","api_token":"__API_TOKEN__","listen_addr":"127.0.0.1:9444"}'
+initial_state = '{"api_addr":"127.0.0.1:8445","api_token":"__API_TOKEN__","listen_addr":"127.0.0.1:9444"}'
 
 [[handler]]
 type = "runtime"

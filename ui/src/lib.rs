@@ -5,7 +5,7 @@
 //! and closes — the actor stays up to serve the next connection.
 //!
 //! Wire shape (write path): HTTP POST over loopback to the tickets-acceptor
-//! API on `api_addr` (plaintext; tickets-acceptor is on 127.0.0.1:8443 with
+//! API on `api_addr` (plaintext; tickets-acceptor is on 127.0.0.1:8445 with
 //! no TLS), Authorization: Bearer <api_token>. Endpoints + JSON shapes per
 //! tickets-dev's wire-format reply 2026-06-05.
 //!
@@ -16,7 +16,7 @@
 //!
 //! Initial state (JSON in Value::String):
 //!   {
-//!     "api_addr":    "127.0.0.1:8443",   // tickets-acceptor API
+//!     "api_addr":    "127.0.0.1:8445",   // tickets-acceptor API
 //!     "api_token":   "<bearer>",         // for outbound writes
 //!     "listen_addr": "127.0.0.1:9444"    // optional; this default
 //!   }
@@ -720,7 +720,7 @@ fn canned_500() -> Vec<u8> {
 
 // ============================================================================
 // HTTP/1.1 client for the tickets API.
-// Plaintext (tickets-acceptor is 127.0.0.1:8443 with no TLS — phase 1
+// Plaintext (tickets-acceptor is 127.0.0.1:8445 with no TLS — phase 1
 // deferred TLS to a reverse proxy that isn't here yet). Bearer auth.
 // Lifted directly from tickets-handler/src/lib.rs:613-683.
 // ============================================================================
