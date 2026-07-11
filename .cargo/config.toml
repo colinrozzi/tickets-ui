@@ -1,0 +1,6 @@
+# PIC side-module link flags (packr 0.8.x recipe). Kept in-tree for the
+# devshell / plain-cargo builds. NOTE: the nix+crane build does NOT honor
+# this file — flake.nix passes the same flags via CARGO_ENCODED_RUSTFLAGS
+# (crane ignores the repo .cargo/config). Keep the two in sync.
+[target.wasm32-unknown-unknown]
+rustflags = ["-C","relocation-model=pic","-C","link-arg=--experimental-pic","-C","link-arg=-shared","-C","link-arg=--import-memory","-C","link-arg=--export=__wasm_call_ctors"]
