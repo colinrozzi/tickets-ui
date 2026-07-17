@@ -41,19 +41,24 @@
             (type == "directory");
         };
 
-        # PIC side-module link flags (packr 0.8.x recipe). These MUST reach
-        # the real cargo invocation. crane does NOT honor the repo
-        # .cargo/config.toml (kept in-tree for devshell / plain-cargo builds),
-        # so pass them via CARGO_ENCODED_RUSTFLAGS — highest cargo precedence,
-        # cannot be shadowed by config. Flags are joined by 0x1f (ASCII unit
-        # separator), cargo's encoded-rustflags delimiter.
-        picSep = builtins.fromJSON "\"\\u001f\"";
-        picRustflags = builtins.concatStringsSep picSep [
-          "-C" "relocation-model=pic"
-          "-C" "link-arg=--experimental-pic"
-          "-C" "link-arg=-shared"
+        # Fixed-base self-contained link flags (packr 0.10.2 recipe; PIC removed).
+        # crane does NOT reliably honor the repo .cargo/config.toml (kept in-tree
+        # for devshell / plain-cargo / `theater build`), so pass the same flags
+        # via CARGO_ENCODED_RUSTFLAGS — highest cargo precedence. Joined by 0x1f
+        # (ASCII unit separator), cargo's encoded-rustflags delimiter.
+        # NOTE: `nix build` here produces the BARE member. The deployable artifact
+        # is the self-contained COMPOSITE (member + packr allocator), produced by
+        # `theater build --release ui` (compose + verify). See release.yml / the
+        # devShell (binaryen + wasm-tools) below.
+        fbSep = builtins.fromJSON "\"\\u001f\"";
+        fixedBaseRustflags = builtins.concatStringsSep fbSep [
           "-C" "link-arg=--import-memory"
-          "-C" "link-arg=--export=__wasm_call_ctors"
+          "-C" "link-arg=--initial-memory=8388608"
+          "-C" "link-arg=--stack-first"
+          "-C" "link-arg=-zstack-size=262144"
+          "-C" "link-arg=--global-base=327680"
+          "-C" "link-arg=--no-entry"
+          "-C" "link-arg=--no-merge-data-segments"
         ];
 
         commonArgs = {
@@ -62,7 +67,7 @@
           version = "0.1.0";
           cargoExtraArgs = "--target wasm32-unknown-unknown";
           CARGO_BUILD_TARGET = "wasm32-unknown-unknown";
-          CARGO_ENCODED_RUSTFLAGS = picRustflags;
+          CARGO_ENCODED_RUSTFLAGS = fixedBaseRustflags;
           doCheck = false;
         };
 
@@ -128,7 +133,9 @@
         };
 
         devShells.default = craneLib.devShell {
-          packages = [ rustToolchain theaterBin pkgs.ripgrep ];
+          # binaryen (wasm-merge) + wasm-tools are required by `theater build`
+          # to compose + verify the self-contained composite (packr 0.10.2).
+          packages = [ rustToolchain theaterBin pkgs.ripgrep pkgs.binaryen pkgs.wasm-tools ];
           shellHook = ''
             echo "tickets-ui dev environment"
             echo "  cargo build --release --target wasm32-unknown-unknown"
