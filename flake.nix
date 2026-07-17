@@ -11,7 +11,11 @@
     crane.url = "github:ipetkov/crane";
 
     theater = {
-      url = "github:colinrozzi/theater/main";
+      # Canonical fleet pin for the packr 0.10.2 self-contained cutover — has
+      # `theater compose` (PR #141). Interface-hash-identical to 58955894, which
+      # release-20260717-5cd49aa was composed on (so that release stays
+      # deploy-valid on the 7daab2ad prod binary — no re-cut).
+      url = "github:colinrozzi/theater/7daab2ad";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.rust-overlay.follows = "rust-overlay";
       inputs.crane.follows = "crane";
