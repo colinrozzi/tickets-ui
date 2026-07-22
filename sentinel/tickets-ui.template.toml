@@ -53,14 +53,29 @@
 #   initial_state as a single-line single-quote literal. Don't
 #   "improve readability" by re-introducing multi-line.
 #
-# server_tls IS INTENTIONALLY ABSENT:
-#   v0 testing is over an SSH tunnel from Colin's laptop straight to
-#   127.0.0.1:9444 on the VPS — no TLS needed. When the frontdoor
-#   actor (https://github.com/colinrozzi/frontdoor) lands, this
-#   template grows a [handler.server_tls] block alongside the tcp
-#   handler with the let'sencrypt cert paths, and frontdoor SNI-routes
-#   tickets-ui.colinrozzi.com to 127.0.0.1:9444. The UI actor code
-#   does not change — only this template does.
+# server_tls — PRE-STAGED, HELD FOR THE tickets.colinrozzi.com CUTOVER:
+#   Phase A brings tickets-ui up plaintext on loopback 127.0.0.1:9444
+#   (frontdoor does not yet route the public hostname to it). The
+#   [handler.server_tls] block below is the inbox-ui-style pre-stage so
+#   the eventual public flip is a one-step render — it is NOT part of the
+#   Phase A render.
+#
+#   SEQUENCING (per frontdoor-dev 2026-07-05): frontdoor SNI-routes the
+#   RAW encrypted stream to this backend, so tickets-ui must terminate TLS
+#   for tickets.colinrozzi.com on :9444 BEFORE frontdoor adds the route —
+#   else every handshake fails at the backend. Order at cutover:
+#     1. operator (claude) provisions the cert via certbot, exactly like
+#        inbox.colinrozzi.com — expected at
+#        /etc/letsencrypt/live/tickets.colinrozzi.com/{fullchain,privkey}.pem
+#     2. sentinel renders this template WITH __CERT_PATH__/__KEY_PATH__ filled
+#        and respawns tickets-ui (TLS now live on :9444)
+#     3. frontdoor fires {op:upsert_route, hostname:tickets.colinrozzi.com,
+#        backend:127.0.0.1:9444} to its :9100 control channel
+#   The UI actor code does not change — theater terminates TLS at the tcp
+#   handler; the actor still does plaintext tcp_receive/tcp_send.
+#
+#   The PR that adds this block is intentionally held out of the Phase A
+#   render; it lands at the routing cutover.
 
 name = "tickets-ui"
 version = "0.1.0"
@@ -79,3 +94,13 @@ type = "runtime"
 
 [[handler]]
 type = "tcp"
+
+# HELD FOR CUTOVER — see the "server_tls — PRE-STAGED" note above. This block
+# makes theater terminate TLS for tickets.colinrozzi.com on the :9444 listener.
+# __CERT_PATH__ / __KEY_PATH__ are filled by sentinel at the routing cutover
+# (expected /etc/letsencrypt/live/tickets.colinrozzi.com/fullchain.pem and
+# privkey.pem). Absent from the Phase A render, which stays plaintext.
+[handler.server_tls]
+enabled = true
+cert = "__CERT_PATH__"
+key = "__KEY_PATH__"
