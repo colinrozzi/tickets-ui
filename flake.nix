@@ -11,11 +11,9 @@
     crane.url = "github:ipetkov/crane";
 
     theater = {
-      # Canonical fleet pin for the packr 0.10.2 self-contained cutover — has
-      # `theater compose` (PR #141). Interface-hash-identical to 58955894, which
-      # release-20260717-5cd49aa was composed on (so that release stays
-      # deploy-valid on the 7daab2ad prod binary — no re-cut).
-      url = "github:colinrozzi/theater/7daab2ad";
+      # packr 0.11.0 plain-build model (composition retired). theater main HEAD
+      # PR #149 (73a4540b) — growable memory; plain cdylib actors load directly.
+      url = "github:colinrozzi/theater/73a4540b";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.rust-overlay.follows = "rust-overlay";
       inputs.crane.follows = "crane";
@@ -45,24 +43,17 @@
             (type == "directory");
         };
 
-        # Fixed-base self-contained link flags (packr 0.10.2 recipe; PIC removed).
-        # crane does NOT reliably honor the repo .cargo/config.toml (kept in-tree
-        # for devshell / plain-cargo / `theater build`), so pass the same flags
-        # via CARGO_ENCODED_RUSTFLAGS — highest cargo precedence. Joined by 0x1f
-        # (ASCII unit separator), cargo's encoded-rustflags delimiter.
-        # NOTE: `nix build` here produces the BARE member. The deployable artifact
-        # is the self-contained COMPOSITE (member + packr allocator), produced by
-        # `theater build --release ui` (compose + verify). See release.yml / the
-        # devShell (binaryen + wasm-tools) below.
-        fbSep = builtins.fromJSON "\"\\u001f\"";
-        fixedBaseRustflags = builtins.concatStringsSep fbSep [
-          "-C" "link-arg=--import-memory"
-          "-C" "link-arg=--initial-memory=8388608"
-          "-C" "link-arg=--stack-first"
-          "-C" "link-arg=-zstack-size=262144"
-          "-C" "link-arg=--global-base=327680"
+        # Plain self-contained link flags (packr 0.11.0; composition retired).
+        # setup_guest!() links dlmalloc into the cdylib, so it exports its own
+        # GROWABLE memory + __pack_alloc/__pack_free and imports only host
+        # theater:simple/*. The resulting `nix build` .wasm is DIRECTLY loadable
+        # — no compose step. crane does NOT reliably honor the repo
+        # .cargo/config.toml, so pass the same two flags via
+        # CARGO_ENCODED_RUSTFLAGS (0x1f-separated).
+        plainSep = builtins.fromJSON "\"\\u001f\"";
+        plainRustflags = builtins.concatStringsSep plainSep [
+          "-C" "link-arg=--export-memory"
           "-C" "link-arg=--no-entry"
-          "-C" "link-arg=--no-merge-data-segments"
         ];
 
         commonArgs = {
@@ -71,14 +62,12 @@
           version = "0.1.0";
           cargoExtraArgs = "--target wasm32-unknown-unknown";
           CARGO_BUILD_TARGET = "wasm32-unknown-unknown";
-          CARGO_ENCODED_RUSTFLAGS = fixedBaseRustflags;
+          CARGO_ENCODED_RUSTFLAGS = plainRustflags;
           doCheck = false;
         };
 
-        # No buildDepsOnly: with the PIC link flags, crane's synthetic
-        # deps-only dummy crate fails to link (-shared needs __heap_base/
-        # __data_end, which only the real crates get from packr-guest's
-        # `pic` feature). Build everything in one buildPackage pass instead.
+        # Single buildPackage pass (no buildDepsOnly) — keeps the guest link
+        # flags applied uniformly to the whole build. Cheap for a small actor.
         cargoArtifacts = null;
 
         theaterBin = theater.packages.${system}.default;
@@ -137,9 +126,9 @@
         };
 
         devShells.default = craneLib.devShell {
-          # binaryen (wasm-merge) + wasm-tools are required by `theater build`
-          # to compose + verify the self-contained composite (packr 0.10.2).
-          packages = [ rustToolchain theaterBin pkgs.ripgrep pkgs.binaryen pkgs.wasm-tools ];
+          # wasm-tools for the self-contained verify (host-only imports).
+          # No binaryen — packr 0.11.0 retired the wasm-merge compose step.
+          packages = [ rustToolchain theaterBin pkgs.ripgrep pkgs.wasm-tools ];
           shellHook = ''
             echo "tickets-ui dev environment"
             echo "  cargo build --release --target wasm32-unknown-unknown"
