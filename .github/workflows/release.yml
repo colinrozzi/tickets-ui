@@ -28,37 +28,24 @@ jobs:
 
       - uses: DeterminateSystems/magic-nix-cache-action@main
 
-      # packr 0.10.2 self-contained: the deployable artifact is the COMPOSITE
-      # (actor member + packr bundled allocator, fused so memory + pack:alloc are
-      # internalized and only host theater:simple/* imports remain). A bare
-      # member is rejected by the 0.10.x loader's assert_self_contained.
-      #
-      # `theater build --release ui` runs cargo build (fixed-base recipe) then
-      # composes + verifies in one step. The devShell provides the 0.10.2 theater
-      # CLI + binaryen (wasm-merge) + wasm-tools + the rust wasm toolchain. cargo
-      # runs on the runner (crates.io reachable), not in a nix sandbox.
-      # CARGO_TARGET_DIR steers the workspace-member build into ui/target where
-      # `theater build` expects it.
-      - name: Build + compose the self-contained composite
-        run: |
-          nix develop --command bash -c '
-            set -euo pipefail
-            export CARGO_TARGET_DIR="$PWD/ui/target"
-            theater build --release ui
-            C="ui/target/wasm32-unknown-unknown/release/tickets_ui.composite.wasm"
-            test -f "$C" || { echo "::error::composite not emitted at $C"; exit 1; }
-            echo "composite: $C ($(stat -c%s "$C") bytes)"
-          '
+      # packr 0.11.0 plain build (composition retired). setup_guest!() links
+      # dlmalloc into the cdylib, so the actor exports its own growable memory +
+      # __pack_alloc/__pack_free and imports only host theater:simple/*. The
+      # resulting .wasm is DIRECTLY loadable — no compose step. `nix build`
+      # applies the two link-args (--export-memory, --no-entry) via the flake's
+      # CARGO_ENCODED_RUSTFLAGS and produces result/tickets_ui.wasm.
+      - name: Build workspace
+        run: nix build
 
-      - name: Verify composite is self-contained (host-only imports)
+      - name: Verify self-contained (host-only imports)
         run: |
-          nix develop --command bash -c '
+          nix shell nixpkgs#wasm-tools --command bash -c '
             set -euo pipefail
-            C="ui/target/wasm32-unknown-unknown/release/tickets_ui.composite.wasm"
-            wasm-tools validate "$C"
-            bad=$(wasm-tools print "$C" | grep -E "^[[:space:]]*\(import " | grep -v "theater:simple/" || true)
-            if [ -n "$bad" ]; then echo "::error::non-host imports (not self-contained):"; echo "$bad"; exit 1; fi
-            echo "all residual imports are host theater:simple/* — composite is self-contained"
+            W="$(realpath result)/tickets_ui.wasm"
+            wasm-tools validate "$W"
+            bad=$(wasm-tools print "$W" | grep -E "^[[:space:]]*\(import " | grep -v "theater:simple/" || true)
+            if [ -n "$bad" ]; then echo "::error::non-host imports (recipe not applied):"; echo "$bad"; exit 1; fi
+            echo "all residual imports are host theater:simple/* — plain self-contained"
           '
 
       - name: Create GitHub release and upload artifacts
@@ -78,24 +65,22 @@ jobs:
 
           STAGE_TAG="${TAG#release-}"
           REPO="${{ github.repository }}"
-          COMPOSITE="ui/target/wasm32-unknown-unknown/release/tickets_ui.composite.wasm"
+          WASM="$(realpath result)/tickets_ui.wasm"
           ASSETS=()
 
-          # 1) Self-contained composite — the deployable artifact (packr 0.10.2).
-          #    Sentinel's `package` field points here via the canonical URL.
-          #    NOTE: this is the COMPOSITE, not a bare member (a bare member is
-          #    rejected by the 0.10.x loader).
-          cp "$COMPOSITE" "tickets_ui-${STAGE_TAG}.composite.wasm"
-          chmod +w "tickets_ui-${STAGE_TAG}.composite.wasm"
-          ASSETS+=("tickets_ui-${STAGE_TAG}.composite.wasm")
+          # 1) Plain self-contained wasm — directly loadable (packr 0.11.0), no
+          #    composite. Sentinel's `package` field points here via the
+          #    canonical release URL.
+          cp "$WASM" "tickets_ui-${STAGE_TAG}.wasm"
+          chmod +w "tickets_ui-${STAGE_TAG}.wasm"
+          ASSETS+=("tickets_ui-${STAGE_TAG}.wasm")
 
-          # 2) Release-flavored manifest with a self-referential package URL
-          #    pointing at this release's composite. Mirrors the in-repo
-          #    ui/manifest.toml handler set. No initial_state — the spawner
-          #    provides it (sentinel template / theater spawn API). No server_tls
-          #    block — held for the tickets.colinrozzi.com routing cutover.
+          # 2) Release-flavored manifest with a self-referential package URL.
+          #    Mirrors the in-repo ui/manifest.toml handler set. No initial_state
+          #    — the spawner provides it (sentinel template / theater spawn API).
+          #    No server_tls block — held for the tickets.colinrozzi.com cutover.
           UI_MANIFEST_FILE="tickets-ui-${STAGE_TAG}.toml"
-          UI_WASM_URL="https://github.com/${REPO}/releases/download/${TAG}/tickets_ui-${STAGE_TAG}.composite.wasm"
+          UI_WASM_URL="https://github.com/${REPO}/releases/download/${TAG}/tickets_ui-${STAGE_TAG}.wasm"
           cat > "${UI_MANIFEST_FILE}" <<TOML
           name = "tickets-ui"
           version = "0.1.0"
@@ -113,7 +98,7 @@ jobs:
           # 3) Bundle (humans / local use) + sha256.
           STAGE="tickets-ui-${STAGE_TAG}-wasm32"
           mkdir -p "$STAGE"
-          cp "$COMPOSITE" "$STAGE/"
+          cp "$WASM" "$STAGE/"
           chmod -R +w "$STAGE"
           tar -czf "$STAGE.tar.gz" "$STAGE"
           sha256sum "$STAGE.tar.gz" > "$STAGE.tar.gz.sha256"
