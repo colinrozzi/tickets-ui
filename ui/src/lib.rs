@@ -24,28 +24,59 @@
 #![no_std]
 extern crate alloc;
 
+use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::{String, ToString};
+use alloc::vec;
 use alloc::vec::Vec;
-use packr_guest::{export, import, pack_types, GraphValue, Value};
+use packr_guest::{export, import, pack_types, Value, ValueType};
 use serde::{Deserialize, Serialize};
+use theater_guest::StateCell;
 
 packr_guest::setup_guest!();
 
 const DEFAULT_LISTEN_ADDR: &str = "127.0.0.1:9444";
 const VALID_STATUSES: &[&str] = &["open", "in-progress", "done", "closed"];
 
-#[derive(Clone, GraphValue)]
-#[graph(crate = "packr_guest::composite_abi")]
+/// Actor state, held in-module (packr 0.24 / theater in-module-state model):
+/// seeded in `init`, read in `handle-connection`. Held in a `StateCell`
+/// DIRECTLY — no `#[derive(State)]`, so NO `theater:simple/actor.get-state`
+/// export is generated. That is deliberate (DESIGN Q3): the API bearer token
+/// lives in this state, and omitting get-state keeps it un-dumpable via
+/// `runtime.get-actor-state`. The immutable store behind the tickets API is
+/// the inspectable source of truth, not this running actor.
 pub struct UiState {
     pub listener_id: String,
     pub api_addr: String,
     pub api_token: String,
 }
 
+static STATE: StateCell<UiState> = StateCell::new();
+
+/// `result<_, string>::ok(())` — success, nothing to return. The in-module-state
+/// exports (`init`, `handle-connection`) return a hand-built `value` rather than
+/// a Rust `Result`, matching the fleet actor idiom at theater d1a9f270.
+fn ok_unit() -> Value {
+    let unit = Value::Tuple(vec![]);
+    Value::Result {
+        ok_type: unit.infer_type(),
+        err_type: ValueType::String,
+        value: Ok(Box::new(unit)),
+    }
+}
+
+/// `result<_, string>::err(msg)`.
+fn err_result(msg: &str) -> Value {
+    Value::Result {
+        ok_type: ValueType::Tuple(Vec::new()),
+        err_type: ValueType::String,
+        value: Err(Box::new(Value::String(String::from(msg)))),
+    }
+}
+
 pack_types! {
     imports {
-        theater:simple/runtime {
+        theater:simple/self {
             log: func(msg: string),
         }
         theater:simple/tcp {
@@ -58,12 +89,12 @@ pack_types! {
         }
     }
     exports {
-        theater:simple/actor.init: func(state: value) -> result<ui-state, string>,
-        theater:simple/tcp-client.handle-connection: func(state: ui-state, connection-id: string) -> result<ui-state, string>,
+        theater:simple/actor.init: func(config: value) -> result<_, string>,
+        theater:simple/tcp-client.handle-connection: func(connection-id: string) -> result<_, string>,
     }
 }
 
-#[import(module = "theater:simple/runtime", name = "log")]
+#[import(module = "theater:simple/self", name = "log")]
 fn log(msg: String);
 
 #[import(module = "theater:simple/tcp", name = "listen")]
@@ -146,59 +177,60 @@ struct SetStatusBody<'a> {
 // ============================================================================
 
 #[export(name = "theater:simple/actor.init")]
-fn init(state: Value) -> Result<(UiState, ()), String> {
+fn init(config: Value) -> Value {
     log(String::from("[tickets-ui] init"));
 
-    let raw = match state {
+    let raw = match config {
         Value::String(s) if !s.is_empty() => s,
         _ => {
-            return Err(String::from(
+            return err_result(
                 "tickets-ui needs initial_state as a non-empty JSON string \
                  ({api_addr, api_token, listen_addr?})",
-            ))
+            )
         }
     };
 
-    let cfg: Config = serde_json::from_str(&raw)
-        .map_err(|e| format!("initial_state is not valid JSON Config: {}", e))?;
+    let cfg: Config = match serde_json::from_str(&raw) {
+        Ok(c) => c,
+        Err(e) => return err_result(&format!("initial_state is not valid JSON Config: {}", e)),
+    };
 
     if cfg.api_addr.is_empty() {
-        return Err(String::from("api_addr must be non-empty"));
+        return err_result("api_addr must be non-empty");
     }
     if cfg.api_token.is_empty() {
-        return Err(String::from("api_token must be non-empty"));
+        return err_result("api_token must be non-empty");
     }
 
     let listen_addr = cfg
         .listen_addr
+        .filter(|s| !s.is_empty())
         .unwrap_or_else(|| String::from(DEFAULT_LISTEN_ADDR));
 
-    let listener_id = tcp_listen(listen_addr.clone())
-        .map_err(|e| format!("listen on {} failed: {}", listen_addr, e))?;
+    let listener_id = match tcp_listen(listen_addr.clone()) {
+        Ok(id) => id,
+        Err(e) => return err_result(&format!("listen on {} failed: {}", listen_addr, e)),
+    };
     log(format!(
         "[tickets-ui] HTTP listening on {} (id={})",
         listen_addr, listener_id
     ));
 
-    Ok((
-        UiState {
-            listener_id,
-            api_addr: cfg.api_addr,
-            api_token: cfg.api_token,
-        },
-        (),
-    ))
+    STATE.set(UiState {
+        listener_id,
+        api_addr: cfg.api_addr,
+        api_token: cfg.api_token,
+    });
+    ok_unit()
 }
 
 #[export(name = "theater:simple/tcp-client.handle-connection")]
-fn handle_connection(
-    state: UiState,
-    connection_id: String,
-) -> Result<(UiState, ()), String> {
+fn handle_connection(connection_id: String) -> Value {
     // Always return Ok — a single bad request must not kill the actor (which
     // would tear down the entire supervision subtree). Log + serve the
-    // canned 500 + carry on.
-    if let Err(e) = try_handle(&state, &connection_id) {
+    // canned 500 + carry on. State lives in the module cell now (STATE), read
+    // via `with`; nothing state-shaped crosses the host boundary.
+    if let Err(e) = STATE.with(|s| try_handle(s, &connection_id)) {
         log(format!(
             "[tickets-ui] handle-connection failed (conn={}): {}",
             connection_id, e
@@ -206,7 +238,7 @@ fn handle_connection(
         let _ = tcp_send(connection_id.clone(), canned_500());
         let _ = tcp_close(connection_id);
     }
-    Ok((state, ()))
+    ok_unit()
 }
 
 fn try_handle(state: &UiState, connection_id: &str) -> Result<(), String> {

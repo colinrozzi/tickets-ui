@@ -11,9 +11,13 @@
     crane.url = "github:ipetkov/crane";
 
     theater = {
-      # packr 0.11.0 plain-build model (composition retired). theater main HEAD
-      # PR #149 (73a4540b) — growable memory; plain cdylib actors load directly.
-      url = "github:colinrozzi/theater/73a4540b";
+      # packr 0.24 / in-module-state ABI. The released wasm's guest ABI is set
+      # by the `theater-guest` git rev in ui/Cargo.toml (d1a9f270 — v0.4.2/0.4.3,
+      # the fleet-services supervisor's embedded theater). This flake input ONLY
+      # feeds the dev shell + the local spawn-gate (`theater spawn` / `.#theater`);
+      # the plain cargo cdylib build (packages.default) does not use it — packr
+      # 0.24 is a plain `cargo build`, no compose step.
+      url = "github:colinrozzi/theater/d1a9f270bdff0e96548e09bdbda6973292c21477";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.rust-overlay.follows = "rust-overlay";
       inputs.crane.follows = "crane";
