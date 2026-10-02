@@ -6,13 +6,13 @@ static_package = true
 #   {
 #     "api_addr":    "127.0.0.1:8456",   // tickets-acceptor API listener
 #     "api_token":   "<bearer>",         // shared bearer the API expects
-#     "listen_addr": "127.0.0.1:9444"    // optional; the actor default
+#     "listen_addr": "127.0.0.1:9445"    // optional; the actor default
 #   }
 # The bearer here is the SAME bearer tickets-acceptor accepts. tickets-dev's
 # guidance is to deliver it via initial_state (not by reading the acceptor's
 # `api-bearer-token` store label). The supervisor injects the production value
 # at deploy time (manager runs the initial deploy; see DESIGN §6).
-initial_state = "{\"api_addr\":\"127.0.0.1:8456\",\"api_token\":\"dev-token-change-me\",\"listen_addr\":\"127.0.0.1:9444\"}"
+initial_state = "{\"api_addr\":\"127.0.0.1:8456\",\"api_token\":\"dev-token-change-me\",\"listen_addr\":\"127.0.0.1:9445\"}"
 
 # packr 0.24 / in-module-state: `self` (log/shutdown) replaces the old `runtime`
 # handler for the log import. The UI spawns no children, so NO `runtime` or

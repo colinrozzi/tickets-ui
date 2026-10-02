@@ -9,7 +9,7 @@
 # mode ships the bytes via --wasm and does not fetch it.
 #
 # initial_state is injected at deploy time (manager's initial deploy). Shape:
-#   {"api_addr":"127.0.0.1:8456","api_token":"<shared tickets bearer>","listen_addr":"127.0.0.1:9444"}
+#   {"api_addr":"127.0.0.1:8456","api_token":"<shared tickets bearer>","listen_addr":"127.0.0.1:9445"}
 name = "tickets-ui"
 version = "0.1.0"
 package = "https://github.com/colinrozzi/tickets-ui/releases/download/<TAG>/tickets_ui-<STAGE>.wasm"
