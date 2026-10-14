@@ -5,7 +5,7 @@
 //! and closes — the actor stays up to serve the next connection.
 //!
 //! Wire shape (write path): HTTP POST over loopback to the tickets-acceptor
-//! API on `api_addr` (plaintext; tickets-acceptor is on 127.0.0.1:8445 with
+//! API on `api_addr` (plaintext; tickets-acceptor is on 127.0.0.1:8456 with
 //! no TLS), Authorization: Bearer <api_token>. Endpoints + JSON shapes per
 //! tickets-dev's wire-format reply 2026-06-05.
 //!
@@ -16,9 +16,9 @@
 //!
 //! Initial state (JSON in Value::String):
 //!   {
-//!     "api_addr":    "127.0.0.1:8445",   // tickets-acceptor API
+//!     "api_addr":    "127.0.0.1:8456",   // tickets-acceptor API
 //!     "api_token":   "<bearer>",         // for outbound writes
-//!     "listen_addr": "127.0.0.1:9444"    // optional; this default
+//!     "listen_addr": "127.0.0.1:9445"    // optional; this default
 //!   }
 
 #![no_std]
@@ -35,7 +35,7 @@ use theater_guest::StateCell;
 
 packr_guest::setup_guest!();
 
-const DEFAULT_LISTEN_ADDR: &str = "127.0.0.1:9444";
+const DEFAULT_LISTEN_ADDR: &str = "127.0.0.1:9445";
 const VALID_STATUSES: &[&str] = &["open", "in-progress", "done", "closed"];
 
 /// Actor state, held in-module (packr 0.24 / theater in-module-state model):
@@ -752,7 +752,7 @@ fn canned_500() -> Vec<u8> {
 
 // ============================================================================
 // HTTP/1.1 client for the tickets API.
-// Plaintext (tickets-acceptor is 127.0.0.1:8445 with no TLS — phase 1
+// Plaintext (tickets-acceptor is 127.0.0.1:8456 with no TLS — phase 1
 // deferred TLS to a reverse proxy that isn't here yet). Bearer auth.
 // Lifted directly from tickets-handler/src/lib.rs:613-683.
 // ============================================================================

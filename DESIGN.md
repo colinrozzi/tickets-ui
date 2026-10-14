@@ -36,7 +36,7 @@ That is the entire URL surface for v0. No `/me`, no `/search`, no `/api/*` from 
 
 ## 2. Listener strategy
 
-**Choice:** the UI actor binds its own loopback port (proposed: `127.0.0.1:9444`), exposed publicly via **caddy** on the fleet-services supervisor box at a dedicated hostname (e.g. `tickets.colinrozzi.com` or `tickets-ui.colinrozzi.com` — Colin / supervisor-dev's call). The tickets backend stays on `127.0.0.1:8456`; the UI actor calls into it over loopback for every read and write.
+**Choice:** the UI actor binds its own loopback port (**`127.0.0.1:9445`** as deployed — `:9444` was already held by another theater process on the fleet-services box and crash-looped the unit, so the live deploy moved to `:9445`; `listen_addr` is manifest-configurable, so this was a one-line change, never hardcoded per-deploy), exposed publicly via **caddy** on the fleet-services supervisor box at a dedicated hostname (e.g. `tickets.colinrozzi.com` or `tickets-ui.colinrozzi.com` — Colin / supervisor-dev's call). The tickets backend stays on `127.0.0.1:8456`; the UI actor calls into it over loopback for every read and write.
 
 **Tradeoff considered:**
 
@@ -49,9 +49,9 @@ That is the entire URL surface for v0. No `/me`, no `/search`, no `/api/*` from 
 
 Separate port wins: deploy independence + a clean backend API surface stack, and the caddy route is one-time work that mirrors what the backend already has. The backend being loopback-only *reinforces* this — the UI is the browser-facing front, the backend stays private behind loopback + caddy.
 
-**Exposure (current reality):** the fleet-services supervisor box runs **caddy** terminating TLS and reverse-proxying public hostnames to loopback backends. tickets-ui plugs in the same way: add a caddy site block for the UI hostname → `127.0.0.1:9444`. The UI actor itself binds **plain HTTP** on loopback — caddy owns TLS. No in-actor TLS, no SNI-peeking frontdoor actor for this deploy.
+**Exposure (current reality):** the fleet-services supervisor box runs **caddy** terminating TLS and reverse-proxying public hostnames to loopback backends. tickets-ui plugs in the same way: add a caddy site block for the UI hostname → `127.0.0.1:9445`. The UI actor itself binds **plain HTTP** on loopback — caddy owns TLS. No in-actor TLS, no SNI-peeking frontdoor actor for this deploy.
 
-**Open coordination (not blocking sign-off):** hostname assignment + the caddy site block are a manager / supervisor-dev / Colin decision. v0 is reachable via SSH tunnel to `127.0.0.1:9444` before the caddy route lands; public HTTPS lands when the route is added. This doc takes no position on the exact hostname.
+**Open coordination (not blocking sign-off):** hostname assignment + the caddy site block are a manager / supervisor-dev / Colin decision. v0 is reachable via SSH tunnel to `127.0.0.1:9445` before the caddy route lands; public HTTPS lands when the route is added. This doc takes no position on the exact hostname.
 
 ## 3. Wire shape — reads and writes
 
@@ -107,10 +107,10 @@ It handles inbound HTTP, outbound API calls over loopback, and HTML rendering. P
 The UI ships as a **supervisor-managed actor** on the dedicated fleet-services supervisor (linode), alongside the tickets backend.
 
 - **Artifact:** a release tag `release-YYYYMMDD-<sha>` carrying the built wasm + a sub-manifest TOML (the shape tickets/inbox already use).
-- **Initial deploy:** manager does the first deploy onto the supervisor and injects the real `initial_state` (`api_addr = 127.0.0.1:8456`, the shared bearer, `listen_addr = 127.0.0.1:9444`).
+- **Initial deploy:** manager does the first deploy onto the supervisor and injects the real `initial_state` (`api_addr = 127.0.0.1:8456`, the shared bearer, `listen_addr = 127.0.0.1:9445`).
 - **Thereafter:** manager hands me a **scoped push key**; I redeploy by **pushing** the wasm + config over the supervisor's management port (push-spawn — the bare box fetches nothing). No separate deploy pipeline.
 - **Manifest:** `[[handler]] type = "self"` + `[[handler]] type = "tcp"`. No `supervisor` handler — the UI spawns no children. Secrets in `initial_state` are redacted from theater logs (runtime #222).
-- **Exposure:** caddy site block on the fleet-services box → `127.0.0.1:9444` (see §2).
+- **Exposure:** caddy site block on the fleet-services box → `127.0.0.1:9445` (see §2).
 
 **Blocked-until pieces (coordination, not design):** (a) GitHub push credentials for this container so I can open the rebuild PR; (b) manager's initial deploy + the scoped push key; (c) hostname + caddy route. None of these block design sign-off.
 
